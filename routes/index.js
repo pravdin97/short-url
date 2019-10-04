@@ -5,6 +5,10 @@ const Models = require('../db/db')
 
 const LINKSIZE = process.env.LINKSIZE || 8
 
+let cache = {
+
+}
+
 /**
  * Поиск объекта, содержащего информацию о ссылке
  * @param shortLink короткая ссылка
@@ -103,6 +107,8 @@ async function shortenLink(link, owner) {
     owner: owner
   })
 
+  cache[shortLink] = created.dataValues
+
   return created
 }
 
@@ -191,9 +197,20 @@ function correctLink(link) {
  */
 router.get('/:short', async (req, res) => {
   const short = req.params.short
-  const linkObject = await find(short)
+  
+  // ищем в кэше
+  let linkObject = cache[short]
+  
+  // если нет, то обращаемся в бд
+  if (linkObject === undefined) {
+    linkObject = await find(short)
+
+    // и добавляем в кэш, если такая ссылка существует
+    if (linkObject !== null)
+      cache[short] = linkObject.dataValues
+  }
+
   if (linkObject !== null) {
-    linkObject.count++
     visitLink(linkObject)
     res.redirect(linkObject.long)
   }
