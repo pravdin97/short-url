@@ -175,33 +175,29 @@ async function getInfoAboutUserLinks(user, link, options) {
 
   return result
 }
+/**
+ * Скорректировать длинную ссылку
+ * @param link длинная ссылка
+ */
+function correctLink(link) {
+  if (link.substr(0, 7) !== 'http://' && link.substr(0, 8) !== 'https://')
+    link = 'http://' + link
+  return link
+}
 
+/**
+ * Переход по ссылке
+ * @param короткая ссылка
+ */
 router.get('/:short', async (req, res) => {
   const short = req.params.short
-  
-  // получаем список всех ссылок пользователя
-  // пользователь определяется по токену из куки
-  if (short === "mylinks") {
-    const tokenFromCookies = req.cookies.shortenAppToken
-      if (tokenFromCookies !== undefined){
-        const ownerLinks = await findUserLinks(tokenFromCookies)
-        res.json({
-          mylinks: ownerLinks
-        })
-      }
-      else res.json({ message: 'You haven\'t shorten any links'})
+  const linkObject = await find(short)
+  if (linkObject !== null) {
+    linkObject.count++
+    visitLink(linkObject)
+    res.redirect(linkObject.long)
   }
-
-  // переход по короткой ссылке
-  else {
-    const linkObject = await find(short)
-    if (linkObject !== null) {
-      linkObject.count++
-      visitLink(linkObject)
-      res.redirect(linkObject.long)
-    }
-    else res.json({ message: 'Error: invalid link' })
-  }
+  else res.json({ message: 'Error: invalid link' })
 })
 
 /**
@@ -210,7 +206,7 @@ router.get('/:short', async (req, res) => {
  */
 router.get('/', async (req, res) => {
   if (req.query.link !== undefined && req.query.link !== "") {
-    const longLink = req.query.link
+    let longLink = req.query.link
     let token = req.cookies.shortenAppToken
     
     if (token === undefined){
@@ -218,7 +214,8 @@ router.get('/', async (req, res) => {
       res.cookie('shortenAppToken', token)
     }
 
-    const created = shortenLink(longLink, token)
+    longLink = correctLink(longLink)
+    const created = await shortenLink(longLink, token)
 
     res.json({ short: created.short })
   }
@@ -228,16 +225,42 @@ router.get('/', async (req, res) => {
 /**
  * Статистика посещений
  * @param link короткая сслыка, для которой необходима статистика
+ * @param day искаль ли количество посещений за день. true/false
+ * @param month искаль ли количество посещений за месяц. true/false
  */
 router.get('/info/stat', async (req, res) => {
   if (req.query.link !== undefined && req.query.link !== "") {
     const link = req.query.link
-    const result = await getInfoAboutUserLinks(req.cookies.shortenAppToken, link, {
-      day: true,
-      month: true
-    })
-    res.json({result})
+    const user = req.cookies.shortenAppToken
+    
+    const day = (req.query.day === 'true')
+    const month = (req.query.month === 'true')
+
+    if (user !== undefined) {
+      const result = await getInfoAboutUserLinks(user, link, {
+        day: day,
+        month: month
+      })
+      res.json({result})
+    }
+    else res.json({result: 'Error: you haven\'t shorten any links'})
   }
+  else res.json({result: 'Error: set link'})
+})
+
+/**
+ * Получаем список всех ссылок пользователя
+ * пользователь определяется по токену из куки
+ */
+router.get('/info/mylinks', async (req, res) => {
+  const tokenFromCookies = req.cookies.shortenAppToken
+  if (tokenFromCookies !== undefined){
+    const ownerLinks = await findUserLinks(tokenFromCookies)
+    res.json({
+      mylinks: ownerLinks
+    })
+  }
+  else res.json({ message: 'You haven\'t shorten any links'})
 })
 
 module.exports = router;
